@@ -5,7 +5,7 @@ opencv (3.4.8+dfsg-1) experimental; urgency=medium
   * Enable nonfree algorithms.
   * Use GStreamer support.
 
- -- Alexey Rogachevskiy <sfalexrog@gmail.com> Wed, 30 Oct 2019 21:40:54 +0300
+ -- Alexey Rogachevskiy <sfalexrog@gmail.com>  Wed, 30 Oct 2019 21:40:54 +0300
 
 opencv (3.4.5+dfsg-1~exp1) experimental; urgency=medium
 
