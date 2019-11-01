@@ -21,6 +21,6 @@ cd deb_opencv_clever
 yes | mk-build-deps -i
 
 echo "--- Building packages"
-export DEB_BUILD_OPTIONS="parallel=12"
+export DEB_BUILD_OPTIONS="parallel=$(nproc)"
 fakeroot debian/rules binary
 
