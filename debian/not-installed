@@ -1,0 +1,5 @@
+usr/python/setup.py
+usr/python/cv2/*.py
+usr/share/OpenCV/3rdparty/lib/*/libmultiview.a
+usr/share/OpenCV/3rdparty/lib/*/libcorrespondence.a
+usr/share/OpenCV/3rdparty/lib/*/libnumeric.a

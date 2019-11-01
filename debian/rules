@@ -1,0 +1,165 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+include /usr/share/dpkg/architecture.mk
+
+BUILDDIR = obj-$(DEB_HOST_MULTIARCH)
+
+CMAKE_ARCH_FLAGS :=
+
+# Comply with Debian architectures baseline.
+# See cmake/OpenCVCompilerOptimizations.cmake for a list of known features.
+# Don't try to autodetect CPU features
+ifeq ($(DEB_HOST_ARCH_CPU),amd64)
+ # Only SSE2 on amd64
+ CMAKE_ARCH_FLAGS += -DCPU_BASELINE=SSE2
+ CMAKE_ARCH_FLAGS += -DCPU_BASELINE_REQUIRE=SSE2
+ CMAKE_ARCH_FLAGS += -DCPU_BASELINE_DISABLE=SSE3
+else ifeq ($(DEB_HOST_ARCH_CPU),armhf)
+ CMAKE_ARCH_FLAGS += -DCPU_BASELINE_DISABLE="VFPV3 NEON"
+ CMAKE_ARCH_FLAGS += -DCPU_DISPATCH=VFPV3,NEON
+else ifeq ($(DEB_HOST_ARCH_CPU),i386)
+ # Be extra sure SSE is not picked up on i386
+ CMAKE_ARCH_FLAGS += -DCPU_BASELINE_DISABLE="SSE SSE2"
+endif
+
+# TBB support
+ifneq (,$(findstring $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips mips64el mipsel ppc64el s390x powerpc powerpcspe ppc64 sh4 sparc64))
+CMAKE_ARCH_FLAGS += -DWITH_TBB=ON
+else
+CMAKE_ARCH_FLAGS += -DWITH_TBB=OFF
+endif
+
+# Linux-specific stuff
+ifeq ($(DEB_HOST_ARCH_OS),linux)
+CMAKE_ARCH_FLAGS += -DWITH_1394=ON -DWITH_V4L=ON
+else
+CMAKE_ARCH_FLAGS += -DWITH_1394=OFF -DWITH_V4L=OFF
+endif
+
+# For Java
+export JAVA_HOME=/usr/lib/jvm/default-java
+
+CMAKE_FLAGS = \
+    -GNinja \
+	-DANT_EXECUTABLE=/usr/bin/ant \
+	-DBUILD_EXAMPLES=ON	\
+	-DBUILD_PROTOBUF=OFF \
+	-DBUILD_TESTS=OFF \
+	-DBUILD_JAVA=ON \
+	-DBUILD_opencv_dnn=ON \
+	-DBUILD_opencv_dnn_modern=ON \
+	-DBUILD_opencv_face=ON \
+	-DCMAKE_BUILD_TYPE=Release	\
+	-DCMAKE_CXX_FLAGS_RELEASE="$(CXXFLAGS)" \
+	-DCMAKE_C_FLAGS_RELEASE="$(CFLAGS)" \
+	-DCMAKE_EXE_LINKER_FLAGS_RELEASE="$(LDFLAGS)" \
+	-DCMAKE_INSTALL_LIBDIR="lib/$(DEB_HOST_MULTIARCH)" \
+	-DCMAKE_INSTALL_PREFIX=/usr \
+	-DCMAKE_SKIP_RPATH=ON \
+	-DCMAKE_VERBOSE_MAKEFILE=ON \
+	-DENABLE_PRECOMPILED_HEADERS=OFF \
+	-DINSTALL_C_EXAMPLES=ON	\
+	-DINSTALL_PYTHON_EXAMPLES=ON \
+	-DOPENCL_INCLUDE_DIR:PATH="/usr/include/CL/" \
+    -DOPENCV_ENABLE_NONFREE=ON \
+	-DOPENCV_EXTRA_MODULES_PATH="$(CURDIR)/contrib/modules" \
+	-DOPENCV_MATHJAX_RELPATH=/usr/share/javascript/mathjax/ \
+	-OPENCV_SKIP_PYTHON_LOADER=ON \
+	-DPROTOBUF_UPDATE_FILES=ON \
+	-DWITH_CAROTENE=OFF \
+	-DWITH_CUDA=OFF \
+	-DWITH_EIGEN=ON \
+	-DWITH_FFMPEG=ON	\
+	-DWITH_GDAL=ON \
+	-DWITH_GDCM=ON \
+	-DWITH_GSTREAMER=ON \
+	-DWITH_GTK=ON \
+	-DWITH_IPP=OFF \
+	-DWITH_ITT=OFF \
+	-DWITH_JASPER=OFF	\
+	-DWITH_JPEG=ON	\
+	-DWITH_OPENEXR=ON \
+	-DWITH_PNG=ON	\
+	-DWITH_QUIRC=OFF \
+	-DWITH_PVAPI=ON	\
+	-DWITH_TIFF=ON	\
+	-DWITH_UNICAP=OFF	\
+	-DWITH_VTK=ON \
+	-DWITH_XINE=OFF	\
+	$(CMAKE_ARCH_FLAGS)
+
+%:
+	dh $@ --with python2,python3,javahelper,jh_maven_repo_helper
+
+override_dh_clean:
+	rm -rvf modules/python/src2/hdr_parser.pyc
+	rm -rvf modules/java/generator/rst_parser.pyc
+	rm -rvf modules/refman.rst
+
+	dh_clean
+	-rm -rvf modules/python/src2/__pycache__
+
+override_dh_auto_clean:
+	dh_auto_clean -B $(BUILDDIR)
+	dh_auto_clean -B $(BUILDDIR)-static
+
+
+override_dh_auto_configure: configure_dyn configure_static
+configure_dyn:
+	dh_auto_configure -B $(BUILDDIR) \
+		-- $(CMAKE_FLAGS) \
+		-DCMAKE_SHARED_LINKER_FLAGS_RELEASE="$(LDFLAGS)" \
+		-DBUILD_SHARED_LIBS=ON -DBUILD_DOCS=ON
+configure_static:
+	dh_auto_configure -B $(BUILDDIR)-static \
+		-- $(CMAKE_FLAGS) \
+		-DBUILD_SHARED_LIBS=OFF -DBUILD_DOCS=OFF
+
+override_dh_auto_build: build_dyn build_static
+build_dyn:
+	dh_auto_build -B $(BUILDDIR)
+	dh_auto_build -B $(BUILDDIR) -- doxygen
+build_static:
+	dh_auto_build -B $(BUILDDIR)-static
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	dh_auto_install -B $(BUILDDIR)
+
+override_dh_install:
+	# change install path of java library
+	sed -i -e "s@share\/OpenCV\/java\/@lib\/jni\/@g" \
+		debian/tmp/usr/share/OpenCV/OpenCVModules-release.cmake
+
+	# put the static libs together with the rest of the stuff
+	cp -v $(BUILDDIR)-static/lib/*.a debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/
+
+	rm -vrf debian/tmp/usr/share/OpenCV/doc/html/jquery.js
+
+	rm -vrf debian/tmp/usr/share/OpenCV/valgrind_3rdparty.supp \
+		debian/tmp/usr/share/OpenCV/valgrind.supp
+
+	find debian/tmp -type d -empty -delete
+	dh_install --fail-missing
+
+override_dh_gencontrol:
+	dh_numpy
+	dh_numpy3
+	dh_gencontrol
+
+OCV_CONTRIB = opencv_contrib-3.4.8
+PKG = opencv
+UVER = $(shell dpkg-parsechangelog -S Version | sed 's,-.*,,')
+DTYPE = +dfsg
+VER  ?= $(subst $(DTYPE),,$(UVER))
+get-orig-source:
+	@echo "# OpenCV Downloading..."
+	uscan --no-conf --verbose --force-download --download-version $(VER) --no-symlink
+	@echo "# Packing..."
+	mk-origtargz --repack --compression xz -S $(DTYPE) -C .. ../opencv_$(VER).orig.tar.gz -v $(VER)
+
+	@echo "# OpenCV contrib Downloading..."
+	uscan --no-conf --verbose --force-download --download-version $(VER) --no-symlink
+	mk-origtargz --repack --compression xz -S $(DTYPE) -C .. ../opencv_$(VER).orig-contrib.tar.gz -v $(VER) -c contrib
