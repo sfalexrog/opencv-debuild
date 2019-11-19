@@ -1,3 +1,10 @@
+opencv (3.4.8+dfsg-2) experimental; urgency=medium
+
+  * Require NEON and VFPV3 optimizations
+  * Fix install paths
+
+ -- Alexey Rogachevskiy <sfalexrog@gmail.com>  Wed, 6 Nov 2019 14:38:43 +0300
+
 opencv (3.4.8+dfsg-1) experimental; urgency=medium
 
   * New upstream version 3.4.8+dfsg
